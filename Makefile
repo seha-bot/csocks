@@ -1,22 +1,51 @@
-LIBS := -lm
-DEPS := \
-https://raw.githubusercontent.com/seha-bot/packages/main/nec/nec.c \
-https://raw.githubusercontent.com/seha-bot/packages/main/nec/nec.h
+EXE := main
+SRC_DIR := src
+BUILD_DIR := build
+DEBUG_DIR := $(BUILD_DIR)/debug
+RELEASE_DIR := $(BUILD_DIR)/release
 
-all: build build/main
+CFLAGS := -Iinc -MMD -Wall
+CFLAGS_DEBUG := -g
+CFLAGS_RELEASE := -DNDEBUG -O3
 
-build:
-	@echo -Iinc > compile_flags.txt && echo -Ibuild/deps >> compile_flags.txt
-	@mkdir -p build/deps && cd build/deps && curl -s $(addprefix -O ,$(DEPS))
-	make $(patsubst %.c,build/deps/%.o,$(filter %.c,$(notdir $(DEPS))))
+.PHONY: all release clean
 
-build/deps/%.o: build/deps/%.c
-	@gcc -c -Iinc -Ibuild/deps $^ -o build/$(notdir $@)
-build/%.o: src/%.c
-	@gcc -g -c -Iinc -Ibuild/deps $^ -o build/$(notdir $@)
+all: $(DEBUG_DIR)/$(EXE)
+release: $(RELEASE_DIR)/$(EXE)
 
-build/main: $(patsubst src/%.c,build/%.o,$(wildcard src/*.c))
-	@gcc -g build/*.o $(LIBS) -o $@
+$(BUILD_DIR):
+	# TODO find a better method for generating compile_flags
+	@echo -Iinc > compile_flags.txt
+	mkdir -p $@
+
+# DEBUG TARGETS
+$(DEBUG_DIR): | $(BUILD_DIR)
+	mkdir -p $@
+
+OBJ_DEBUG := $(patsubst $(SRC_DIR)/%.c,$(DEBUG_DIR)/%.o,$(wildcard $(SRC_DIR)/*.c))
+
+$(DEBUG_DIR)/%.o: $(SRC_DIR)/%.c | $(DEBUG_DIR)
+	$(CC) $(CFLAGS) $(CFLAGS_DEBUG) -c $< -o $@
+
+$(DEBUG_DIR)/$(EXE): $(OBJ_DEBUG)
+	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+-include $(OBJ_DEBUG:.o=.d)
+
+# RELEASE TARGETS
+$(RELEASE_DIR): | $(BUILD_DIR)
+	mkdir -p $@
+
+OBJ_RELEASE := $(patsubst $(SRC_DIR)/%.c,$(RELEASE_DIR)/%.o,$(wildcard $(SRC_DIR)/*.c))
+
+$(RELEASE_DIR)/%.o: $(SRC_DIR)/%.c | $(RELEASE_DIR)
+	$(CC) $(CFLAGS) $(CFLAGS_RELEASE) -c $< -o $@
+
+$(RELEASE_DIR)/$(EXE): $(OBJ_RELEASE)
+	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 clean:
-	rm -rf build compile_flags.txt
+	$(RM) -r $(BUILD_DIR)
+	$(RM) compile_flags.txt
+
+-include $(OBJ_RELEASE:.o=.d)
